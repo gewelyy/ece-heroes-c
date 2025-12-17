@@ -1,0 +1,10 @@
+# Ignore document files
+*.pdf
+*.docx
+*.odt
+*.pptx
+
+# Ignore C/C++ compiled files
+*.o
+*.exe
+*.out

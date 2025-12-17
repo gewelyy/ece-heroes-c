@@ -1,0 +1,223 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <math.h> 
+
+// --- CONSTANTES ET STRUCTURES (Selon Cahier des Charges) ---
+#define LIGNES 25       // [cite: 63]
+#define COLONNES 45     // [cite: 63]
+#define NB_TYPES 5      // [cite: 64]
+#define VIDE 0          // Code pour une case vide
+
+// Structure représentant l'état du jeu
+typedef struct {
+    int grille[LIGNES][COLONNES];
+    int score;
+    int vies;
+    int coupsRestants;
+} Jeu;
+
+// --- PROTOTYPES DES FONCTIONS ---
+void initialiserGrille(int grille[LIGNES][COLONNES]);
+void appliquerGravite(int grille[LIGNES][COLONNES]);
+int permuterItems(int grille[LIGNES][COLONNES], int x1, int y1, int x2, int y2);
+int supprimerAlignements(int grille[LIGNES][COLONNES]);
+void afficherGrilleConsole(int grille[LIGNES][COLONNES]); // Juste pour tester
+
+// --- PROGRAMME PRINCIPAL (POUR TEST) ---
+int main() {
+    // Initialisation du générateur aléatoire
+    srand(time(NULL));
+
+    // Création de la grille de jeu
+    int grille[LIGNES][COLONNES];
+    
+    printf("Initialisation de la grille...\n");
+    initialiserGrille(grille);
+    
+    // Affichage initial (version simplifiée)
+    afficherGrilleConsole(grille);
+
+    // Exemple de boucle de jeu simplifiée (Simulation)
+    printf("\n--- Simulation d'un tour ---\n");
+    
+    // Simuler une suppression (pour tester la gravité)
+    printf("Suppression arbitraire de quelques cases pour tester la gravite...\n");
+    grille[10][10] = VIDE;
+    grille[11][10] = VIDE;
+    grille[12][10] = VIDE;
+
+    // Appliquer la gravité
+    appliquerGravite(grille);
+    printf("Gravite appliquee. Les cases vides ont ete remplies.\n");
+
+    // Vérifier les alignements
+    int score = supprimerAlignements(grille);
+    printf("Score genere par les alignements automatiques : %d\n", score);
+
+    return 0;
+}
+
+// --- IMPLEMENTATION DES FONCTIONS DU MOTEUR ---
+
+/*
+ * Fonction : initialiserGrille
+ * Rôle : Remplit la grille aléatoirement sans créer de combinaisons initiales.
+ * Source : [cite: 138] "Au début du niveau, aucune figure spéciale ne doit apparaître"
+ */
+void initialiserGrille(int grille[LIGNES][COLONNES]) {
+    int i, j, type;
+    int valide;
+
+    for (i = 0; i < LIGNES; i++) {
+        for (j = 0; j < COLONNES; j++) {
+            do {
+                valide = 1;
+                type = 1 + rand() % NB_TYPES; // Items entre 1 et 5
+
+                // Vérification Horizontale (évite 3 identiques)
+                if (j >= 2 && grille[i][j-1] == type && grille[i][j-2] == type) {
+                    valide = 0;
+                }
+                // Vérification Verticale (évite 3 identiques)
+                if (i >= 2 && grille[i-1][j] == type && grille[i-2][j] == type) {
+                    valide = 0;
+                }
+                
+            } while (!valide);
+
+            grille[i][j] = type;
+        }
+    }
+}
+
+/*
+ * Fonction : appliquerGravite
+ * Rôle : Fait tomber les items et remplit les vides en haut.
+ * Source : [cite: 140, 141] "les items présents au-dessus tombent... Les vides... sont comblés"
+ */
+void appliquerGravite(int grille[LIGNES][COLONNES]) {
+    int i, j, k;
+
+    // On traite chaque colonne indépendamment
+    for (j = 0; j < COLONNES; j++) {
+        int ecriture = LIGNES - 1; 
+        
+        // 1. Décalage des items existants vers le bas
+        for (i = LIGNES - 1; i >= 0; i--) {
+            if (grille[i][j] != VIDE) {
+                grille[ecriture][j] = grille[i][j];
+                ecriture--;
+            }
+        }
+        
+        // 2. Remplissage des cases du haut (de 0 à ecriture) avec du hasard
+        for (k = ecriture; k >= 0; k--) {
+            grille[k][j] = 1 + rand() % NB_TYPES; 
+        }
+    }
+}
+
+/*
+ * Fonction : permuterItems
+ * Rôle : Echange deux cases adjacentes choisies par le joueur.
+ * Source : [cite: 144] "choisir le voisin avec lequel il souhaite le permuter"
+ */
+int permuterItems(int grille[LIGNES][COLONNES], int x1, int y1, int x2, int y2) {
+    // Vérification des limites de la grille
+    if (x1 < 0 || x1 >= COLONNES || x2 < 0 || x2 >= COLONNES ||
+        y1 < 0 || y1 >= LIGNES || y2 < 0 || y2 >= LIGNES) {
+        return 0; // Hors limites
+    }
+    
+    // Vérification de l'adjacence (Haut, Bas, Gauche, Droite uniquement)
+    int distance = abs(x1 - x2) + abs(y1 - y2);
+    if (distance != 1) {
+        return 0; // Pas voisins
+    }
+
+    // Echange
+    int temp = grille[y1][x1];
+    grille[y1][x1] = grille[y2][x2];
+    grille[y2][x2] = temp;
+    
+    return 1; // Succès
+}
+
+/*
+ * Fonction : supprimerAlignements
+ * Rôle : Détecte les alignements (>=3), supprime les items et retourne le score.
+ * Note : C'est la base pour le "match-3"[cite: 19]. Les figures complexes (Carré, Croix)
+ * devront être ajoutées ici en respectant les priorités décrites [cite: 77-135].
+ */
+int supprimerAlignements(int grille[LIGNES][COLONNES]) {
+    int aSupprimer[LIGNES][COLONNES] = {0}; // 0 = garde, 1 = supprime
+    int i, j, k;
+    int itemsSupprimes = 0;
+
+    // --- 1. Analyse Horizontale ---
+    for (i = 0; i < LIGNES; i++) {
+        for (j = 0; j < COLONNES - 2; j++) {
+            int type = grille[i][j];
+            if (type == VIDE) continue;
+
+            // Compter la longueur de la suite
+            int count = 1;
+            while ((j + count < COLONNES) && (grille[i][j + count] == type)) {
+                count++;
+            }
+
+            // Si suite >= 3, on marque à supprimer
+            if (count >= 3) { 
+                for (k = 0; k < count; k++) {
+                    aSupprimer[i][j + k] = 1;
+                }
+                j += count - 1; // On saute les cases qu'on vient de traiter
+            }
+        }
+    }
+
+    // --- 2. Analyse Verticale ---
+    for (j = 0; j < COLONNES; j++) {
+        for (i = 0; i < LIGNES - 2; i++) {
+            int type = grille[i][j];
+            if (type == VIDE) continue;
+
+            int count = 1;
+            while ((i + count < LIGNES) && (grille[i + count][j] == type)) {
+                count++;
+            }
+
+            if (count >= 3) {
+                for (k = 0; k < count; k++) {
+                    aSupprimer[i + k][j] = 1;
+                }
+                i += count - 1;
+            }
+        }
+    }
+
+    // --- 3. Suppression effective et calcul du score ---
+    for (i = 0; i < LIGNES; i++) {
+        for (j = 0; j < COLONNES; j++) {
+            if (aSupprimer[i][j] == 1) {
+                grille[i][j] = VIDE;
+                itemsSupprimes++;
+            }
+        }
+    }
+
+    return itemsSupprimes;
+}
+
+// Fonction utilitaire pour visualiser (Affiche une petite partie de la grille)
+void afficherGrilleConsole(int grille[LIGNES][COLONNES]) {
+    printf("\n--- Apercu Grille (10x10) ---\n");
+    for (int i = 0; i < 10; i++) {
+        for (int j = 0; j < 10; j++) {
+            printf("%d ", grille[i][j]);
+        }
+        printf("\n");
+    }
+    printf("...\n");
+}
